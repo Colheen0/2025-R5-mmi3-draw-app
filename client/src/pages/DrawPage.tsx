@@ -1,60 +1,28 @@
-import { useEffect } from 'react'
-import { AppHeader } from '../components/AppHeader/AppHeader'
-import { DrawLayout } from '../components/DrawLayout/DrawLayout'
-import { DrawArea} from '../components/DrawArea/drawArea'
-import { DrawSocket } from '../DrawSocket'
-import { useMyUserStore } from '../store/useMyUserStore'
-import { useMyUsersStore } from '../store/useMyUsersStore'
-import { createMyUser } from '../utils/create-my-user'
-import { Instructions } from '../components/Instructions/Instructions'
-import { UserList } from '../components/UserList/UserList'
-import { getInstructions } from '../utils/get-instructions'
+import { AppHeader } from '../shared/components/AppHeader/AppHeader'
+import { DrawLayout } from '../shared/components/layouts/DrawLayout/DrawLayout'
+
+import { Instructions } from '../shared/components/Instructions/Instructions'
+import { getInstructions } from '../shared/utils/get-instructions'
+import { UserList } from '../features/user/components/UserList'
+import { DrawArea } from '../features/drawing/components/DrawArea'
+import { useUpdatedUserList } from '../features/user/hooks/useUpdatedUserList'
+import { useJoinMyUser } from '../features/user/hooks/useJoinMyUser'
 
 function DrawPage() {
-  const setMyUser = useMyUserStore((state) => state.setMyUser);
-  const setMyUsers = useMyUsersStore((state) => state.setMyUsers);
-  const users = useMyUsersStore((state) => state.users); 
-
-  const onClickJoin = () => {
-    DrawSocket.emit("myUser:join", createMyUser() );
-  }
-
-  useEffect(() => {
-    DrawSocket.get('users').then((data) => { if (data){
-      setMyUsers(data.users);}})
-     }, [setMyUsers]);
-
-  useEffect(() => {
-    DrawSocket.listen("myUser:joined", (data) => {
-      setMyUser(data.user);
-
-      console.log("My User joined:success", data);
-    });
-    return () => {
-      DrawSocket.off("myUser:joined");
-    }
-  }, [setMyUser]);
-
-  useEffect(() => {
-    DrawSocket.listen("users:updated", (data) => {
-      setMyUsers(data.users);
-
-      console.log("My User updated:success", data);
-    });
-    return () => {
-      DrawSocket.off("users:updated");
-    }
-  }, [setMyUsers]);
+  const { joinMyUser }  = useJoinMyUser();
+  const { userList } = useUpdatedUserList();
 
   return (
     <DrawLayout
       topArea={<AppHeader 
-        onClickJoin={onClickJoin}
-        
+        onClickJoin={() => joinMyUser()}
       />}
       rightArea={
         <>
-          <UserList users= {users}/>
+          {/* <Instructions>
+            {getInstructions('user-list')}
+          </Instructions> */}
+          <UserList users={userList} />
         </>
       }
       bottomArea={
@@ -65,10 +33,12 @@ function DrawPage() {
         </>
       }
     >
-      {/*<Instructions>
+      <DrawArea />
+      {/* <TestDrawArea /> */}
+      <Instructions className="max-w-xs">
         {getInstructions('draw-area')}
-      </Instructions>*/}
-      <DrawArea/>
+      </Instructions>
+      
     </DrawLayout>
   )
 }

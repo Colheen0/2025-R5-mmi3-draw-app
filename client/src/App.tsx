@@ -1,11 +1,11 @@
 import DrawPage from './pages/DrawPage';
-import { useDrawingStore } from './store/useDrawingStore';
+import { useSocketStore } from './shared/store/useSocketStore';
 
 function App() {
-  const isConnectedToServer = useDrawingStore().isConnectedToServer;
+  const { isConnectedToServer } = useSocketStore();
 
   if (!isConnectedToServer) {
-    return <div>Connecting to server...</div>
+    return <div className="w-full min-h-screen flex items-center justify-center font-bold">Connecting to server...</div>
   }
 
   return (

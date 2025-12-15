@@ -17,7 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 
 
 const getServerPort = () => {
-  return process.env.SERVER_PORT || 3005;
+  return process.env.SERVER_PORT || 3007;
 }
 
 const server = createServer(app);

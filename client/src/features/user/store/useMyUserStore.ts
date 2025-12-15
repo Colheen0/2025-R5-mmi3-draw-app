@@ -1,11 +1,12 @@
 import { create } from 'zustand'
+import type { User } from '../../../shared/types/user.type';
 
 type UserState = {
-  myUser: { username: string; avatar: string } | null;
+  myUser: User | null;
 }
 
 type UserAction = {
-  setMyUser: (user: { username: string; avatar: string } | null) => void,
+  setMyUser: (user: User | null) => void,
   resetMyUser: () => void
 };
 

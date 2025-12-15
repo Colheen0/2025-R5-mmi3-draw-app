@@ -88,6 +88,10 @@ export const handleAppForClient = (app: ReturnType<typeof express>, io: Server, 
     const userId = socket.id;
     
     const stroke = addDrawStroke(userId, { x, y }, color, strokeWidth);
+    editUser(userId, { hasDrawn: true });
+    
+    emitToAll(SERVER_TO_CLIENT_EVENTS_NAMES.USERS_UPDATED, { users: getUsers() });
+
     
     emitToAllButSender(SERVER_TO_CLIENT_EVENTS_NAMES.DRAW_START, stroke);
   });

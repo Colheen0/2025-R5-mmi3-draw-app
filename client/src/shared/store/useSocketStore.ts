@@ -1,14 +1,14 @@
 import { create } from 'zustand'
 
-type DrawingState = {
+type SocketState = {
   isConnectedToServer: boolean;
 }
 
-type DrawingAction = {
+type SocketAction = {
   setIsConnectedToServer: (isConnectedToServer: boolean) => void;
 };
 
-export const useDrawingStore = create<DrawingState & DrawingAction>((set) => ({
+export const useSocketStore = create<SocketState & SocketAction>((set) => ({
   isConnectedToServer: false,
   setIsConnectedToServer: (isConnectedToServer: boolean) => set({ isConnectedToServer }),
 }));

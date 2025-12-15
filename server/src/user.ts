@@ -25,6 +25,7 @@ export const addUser = (id: UserWithSocketId['socketId'], user: Partial<User>) =
     score: 0,
     hasDrawn: false,
     ...user,
+    id,
     socketId: id,
   };
   users.set(id, newUser);

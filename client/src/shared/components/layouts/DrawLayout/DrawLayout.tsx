@@ -1,13 +1,13 @@
 import styles from './DrawLayout.module.css';
 
-type Props = {
+type DrawLayoutProps = {
   children?: React.ReactNode;
   topArea?: React.ReactNode;
   rightArea?: React.ReactNode;
   bottomArea?: React.ReactNode;
 };
 
-export function DrawLayout({topArea, bottomArea, rightArea, children}: Props) {
+export function DrawLayout({topArea, bottomArea, rightArea, children}: DrawLayoutProps) {
   return (
     <div className={styles.drawLayout}>
       {topArea && 
