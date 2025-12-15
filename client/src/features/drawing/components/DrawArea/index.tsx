@@ -2,166 +2,255 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getCoordinatesRelativeToElement } from "../../utils/getCanvasCoordinates";
 import { useMyUserStore } from "../../../user/store/useMyUserStore";
 import styles from './DrawArea.module.css';
+import { SocketManager } from "../../../../shared/services/SocketManager";
+import type { DrawStroke } from "../../../../shared/types/drawing.type";
+import type { Point } from "../../../../shared/types/drawing.type";
 
-/**
- * EN SAVOIR PLUS : 
- * DPR : https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio
- * ResizeObserver : https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver
- */
+// 1. Définition de l'interface pour la réponse du serveur
+interface StrokesResponse {
+  strokes: DrawStroke[];
+}
 
 export function DrawArea() {
-  /**
-   * ===================
-   * ETATS & REFS (toujours les définir en haut du composant)
-   * ===================
-   * 
-  */
-   
-  /**
-   * Rappel : Les modifications de state impliquent un re-render alors que les ref ne provoquent AUCUN re-render (c'est pour ça qu'on ne les ajoute pas dans les dépendances d'un hook par exemple)
-   * 
-  */ 
-
-  /**
-   * On utilise des refs ici, car on ne veut surtout pas provoquer de re-render à chaque fois qu'on a une modification de tracé
-   * Ici, on va donc pouvoir stocker les informations dont on a besoin, sans provoquer aucun re-rendu
-  */
-  const canvasRef = useRef<HTMLCanvasElement>(null); /** Les updates sur ces constantes ne provoqueront pas re-render */
-  const parentRef = useRef<HTMLDivElement>(null); /** Les updates sur ces constantes ne provoqueront pas re-render */
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
+  const otherUserStrokes = useRef<Map<string, Point[]>>(new Map());
+  const canvasCssDimensions = useRef({ width: 0, height: 0 }); 
 
   const { myUser } = useMyUserStore();
-  const canUserDraw = useMemo(() => myUser !== null, [myUser]); 
-  
-  /**
-   * ===================
-   * GESTION COORDONNEES
-   * ===================
-   */
+  const canUserDraw = useMemo(() => myUser !== null, [myUser]);
 
-  /** Pour récupérer les coordonnées d'un event en prenant en compte le placement de notre canvas */
-  const getCanvasCoordinates = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | MouseEvent) => {
     return getCoordinatesRelativeToElement(e.clientX, e.clientY, canvasRef.current);
-  } 
+  }
 
-  /**
-   * Conseil @todo: 
-   * Faîtes une fontion qui va venir dessiner en fonction de coordonées que vous passez
-   */
+  const drawLine = useCallback((
+    from: { x: number, y: number },
+    to: { x: number, y: number }
+  ) => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
 
-  /**
-   * ===================
-   * GESTION DES EVENEMENTS MOUSE
-   * ===================
-   */
-  
-  const onMouseMove = useCallback((e: MouseEvent) => {
-    console.log('onMouseMove', e);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000';
+
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
   }, []);
 
+  // --- GESTION EVENTS MOUSE ---
+  const isDrawingRef = useRef(false);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+  const pointsRef = useRef<Array<{ x: number; y: number }>>([]);
+
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDrawingRef.current) { return; }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    const lastX = lastPosRef.current.x;
+    const lastY = lastPosRef.current.y;
+
+    drawLine({ x: lastX, y: lastY }, { x: currentX, y: currentY });
+
+    pointsRef.current.push({ x: currentX, y: currentY });
+    lastPosRef.current = { x: currentX, y: currentY };
+
+    const dimensions = canvasCssDimensions.current;
+    // Sécurité pour éviter la division par 0
+    if (dimensions.width > 0 && dimensions.height > 0) {
+      const normalizedX = currentX / dimensions.width;
+      const normalizedY = currentY / dimensions.height;
+      SocketManager.emit('draw:move', { x: normalizedX, y: normalizedY });
+    }
+  }, [drawLine]);
+
   const onMouseUp = useCallback((e: MouseEvent) => {
-    console.log('onMouseUp', e);
+    console.log(e, 'mouseup');
+    isDrawingRef.current = false;
+    SocketManager.emit('draw:end');
   }, []);
 
   const onMouseDown: React.MouseEventHandler<HTMLCanvasElement> = useCallback((e) => {
-    /** On empêche à l'utilisateur de dessiner tant qu'il n'a pas rejoint le serveur  */
+    isDrawingRef.current = true;
     if (!canUserDraw) { return; }
-
-    /** Récupération du contexte 2d du canvas */
     const canvas = e.currentTarget;
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
+    if (!ctx) return;
+
+    const coordinates = getCanvasCoordinates(e);
+    lastPosRef.current = { x: coordinates.x, y: coordinates.y };
+
+    const dimensions = canvasCssDimensions.current;
+    if (dimensions.width > 0 && dimensions.height > 0) {
+      const normalizedX = coordinates.x / dimensions.width;
+      const normalizedY = coordinates.y / dimensions.height;
+      SocketManager.emit('draw:start', {
+        x: normalizedX,
+        y: normalizedY,
+        color: '#000',
+        strokeWidth: 2,
+      });
     }
 
-    /** Transformation des coordoonées mouse (relatives à la page) vers des coordonnées relative au canvas  */
-    const coordinates = getCanvasCoordinates(e);
-
-    /** Ressource: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API */
-    /** On commence par un "beginPath" pour débuter le tracé */
-    ctx.beginPath();
-
-    /** Dans ce 1er exemple (on changera par la suite), j'affiche des points là où je fais un mousedown, donc j'ai choisi d'utiliser la méthode arc : https://developer.mozilla.org/fr/docs/Web/API/CanvasRenderingContext2D/arc */
-    ctx.arc(coordinates.x, coordinates.y, 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    /**
-    * On pourrait ajouter le onMouseMove, onMouseUp directement dans le JSX de notre canvas, mais les ajouter à la volée ici est plus flexible. On pourra retirer ces events onMouseUp
-    * Cela évite aussi les re-render inutile
-    */
     canvasRef.current?.addEventListener('mousemove', onMouseMove);
     canvasRef.current?.addEventListener('mouseup', onMouseUp);
   }, [canUserDraw, onMouseMove, onMouseUp]);
 
-  /**
-   * ===================
-   * GESTION DES DPR
-   * ===================
-   */
-
-  /**
-   * setCanvasDimensions : Configure les dimensions du canvas avec DPR
-   */
+  // --- CONFIGURATION CANVAS ---
   const setCanvasDimensions = useCallback(() => {
     if (!canvasRef.current || !parentRef.current) return;
-
-    /** On va utiliser le ratio de pixel de l'écran pour avoir un rendu net  (DPR = 3|2|1) et par défaut on sera toujours à 1 */
     const dpr = window.devicePixelRatio || 1;
-
-    /** On définit la taille réelle interne du canvas en se basant sur les DPR  */
     const parentWidth = parentRef.current?.clientWidth;
-    const canvasWidth = parentWidth; /** On veut remplir 100% de la largeur de l'élément parent */
-    const canvasHeight = Math.round(parentWidth * 9 / 16); /** On veut un ratio 16/9 par rapport à la largeur */
+    const canvasWidth = parentWidth;
+    const canvasHeight = Math.round(parentWidth * 9 / 16);
 
-    canvasRef.current.width = dpr * canvasWidth; /** On multiplie la largeur souhaitée par le nb de dpr */
-    canvasRef.current.height = dpr * canvasHeight; /** On multiplie la hauteur souhaitée par le nb de dpr */
+    canvasRef.current.width = dpr * canvasWidth;
+    canvasRef.current.height = dpr * canvasHeight;
 
-    /**  On définit ensuite la taille en CSS, visible par l'utilisateur  */
-    
     parentRef.current.style.setProperty('--canvas-width', `${canvasWidth}px`);
     parentRef.current.style.setProperty('--canvas-height', `${canvasHeight}px`);
+    
+    canvasCssDimensions.current = { width: canvasWidth, height: canvasHeight };
 
     const ctx = canvasRef.current.getContext("2d");
     if (ctx) {
-      /** On scale en prenant compte les dpr */
-      ctx.scale(dpr, dpr); 
+      ctx.scale(dpr, dpr);
     }
   }, []);
 
-  /**
-   * ===================
-   * GESTION DU RESIZE
-   * ===================
-  */
+  // --- DESSIN DES AUTRES UTILISATEURS ---
+  const drawOtherUserPoints = useCallback((socketId: string, points: Point[]) => {
+    if (!canvasRef.current) return;
+    
+    const canvasWidth = canvasRef.current.clientWidth;
+    const canvasHeight = canvasRef.current.clientHeight;
+    // Si la taille est 0 (ex: chargement), on ne dessine pas pour éviter les bugs
+    if (canvasWidth === 0 || canvasHeight === 0) return;
 
+    const previousPoints = otherUserStrokes.current.get(socketId) || [];
+    
+    points.forEach((point, index) => {
+      if (index < previousPoints.length) {
+        return; 
+      }
+      
+      const to = { 
+          x: point.x * canvasWidth, 
+          y: point.y * canvasHeight 
+      };
 
+      let from;
+      if (index === 0) {
+        from = to;
+      } else {
+        const prevPoint = points[index - 1];
+        from = {
+          x: prevPoint.x * canvasWidth,
+          y: prevPoint.y * canvasHeight,
+        };
+      }
+
+      drawLine(from, to);
+    });
+  }, [drawLine]);
+
+  // 2. FONCTION POUR TOUT REDESSINER (Appelée au resize)
+  const redrawAllStrokes = useCallback(async () => {
+      // On vide la mémoire locale des "strokes déjà dessinés" pour forcer le redessin
+      otherUserStrokes.current.clear();
+
+      try {
+        // On récupère tout depuis le serveur (ou un store local si vous en avez un)
+        const data = await SocketManager.get('strokes') as StrokesResponse;
+        
+        if (!data || !data.strokes) return;
+
+        data.strokes.forEach((stroke) => {
+            // On remplit la ref
+            otherUserStrokes.current.set(stroke.socketId, stroke.points);
+            // On force le dessin en passant TOUS les points
+            // Note: drawOtherUserPoints va comparer avec otherUserStrokes, 
+            // mais comme on vient de set la map juste au dessus, il faut ruser ou adapter drawOtherUserPoints.
+            // LE PLUS SIMPLE ICI : On appelle drawLine manuellement pour tout redessiner.
+            
+            // Pour simplifier, on va vider la map juste avant d'appeler la fonction de dessin 
+            // pour qu'elle croit que rien n'est dessiné.
+            otherUserStrokes.current.delete(stroke.socketId); 
+            drawOtherUserPoints(stroke.socketId, stroke.points);
+            
+            // Et on remet à jour la map
+            otherUserStrokes.current.set(stroke.socketId, stroke.points);
+        });
+      } catch (err) {
+          console.error("Erreur redraw", err);
+      }
+  }, [drawOtherUserPoints]);
+
+  const onOtherUserDrawStart = useCallback((payload: DrawStroke) => {
+    drawOtherUserPoints(payload.socketId, payload.points);
+    otherUserStrokes.current.set(payload.socketId, payload.points);
+  }, [drawOtherUserPoints]);
+
+  const onOtherUserDrawMove = useCallback((payload: DrawStroke) => {
+    drawOtherUserPoints(payload.socketId, payload.points);
+    otherUserStrokes.current.set(payload.socketId, payload.points); // Important de mettre à jour le stroke complet
+  }, [drawOtherUserPoints]);
+
+  const onOtherUserDrawEnd = useCallback((payload: DrawStroke) => {
+    otherUserStrokes.current.delete(payload.socketId);
+     // Optionnel : Nettoyage
+  }, []);
+
+  // --- LISTENERS SOCKET ---
   useEffect(() => {
-    /**
-     * On souhaite redimensionner le canvas et recharger les strokes au resize
-     */
+    SocketManager.listen('draw:start', onOtherUserDrawStart);
+    SocketManager.listen('draw:move', onOtherUserDrawMove);
+    SocketManager.listen('draw:end', onOtherUserDrawEnd);
+
+    return () => {
+      SocketManager.off('draw:start');
+      SocketManager.off('draw:move');
+      SocketManager.off('draw:end');
+    }
+  }, [onOtherUserDrawEnd, onOtherUserDrawMove, onOtherUserDrawStart]);
+
+
+  // --- RESIZE OBSERVER ---
+  useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       setCanvasDimensions();
+      // 3. IMPORTANT : On redessine tout après avoir changé la taille
+      redrawAllStrokes();
     });
-    
-    /** On observe les changements de taille sur l'élément parent */
+
     if (parentRef.current) {
       resizeObserver.observe(parentRef.current);
     }
 
-    /** 
-     * Rappel : Il s'agit d'une fonction de cleanup (dans le useEffect le cleanup est optionnel). A chaque fois qu'un re-rendu est effectué, le cleanup est d'abord effectué avant de re ré-effectuer le useEffect classique. Elle est également appelée lorsque le component est removed du DOM. 
-     */
     return () => {
-      /** On veut disconnect pour éviter d'avoir plusieurs resizeObservers ou d'avoir un resizeObserver sur un élément qui n'existe plus  */
       resizeObserver.disconnect();
     };
+  }, [setCanvasDimensions, redrawAllStrokes]);
 
-  }, [setCanvasDimensions]);
+
+  // 4. CHARGEMENT INITIAL (Corrigé)
+  useEffect(() => {
+    // On utilise simplement la fonction qu'on a créée pour le resize, elle fait la même chose
+    redrawAllStrokes(); 
+  }, [redrawAllStrokes]);
+
 
   return (
     <div className={[styles.drawArea, 'w-full', 'h-full', 'overflow-hidden', 'flex', 'items-center'].join(' ')} ref={parentRef}>
-      <canvas className={[styles.drawArea__canvas, 'border-1'].join(' ')} onMouseDown={onMouseDown} ref={canvasRef}
-      >
-      </canvas>
+      <canvas className={[styles.drawArea__canvas, 'border-1'].join(' ')} onMouseDown={onMouseDown} ref={canvasRef} />
     </div>
   )
 }

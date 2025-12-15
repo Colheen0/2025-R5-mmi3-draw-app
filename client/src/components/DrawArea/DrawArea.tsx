@@ -14,6 +14,7 @@ const onMouseDown: React.MouseEventHandler<HTMLCanvasElement> = useCallback((e) 
 
 const onMouseUp = useCallback(() => {
   console.log("Mouse up on canvas")
+  
 }, [])
 
 const onMouseMove: React.MouseEventHandler<HTMLCanvasElement> = useCallback((e) => {

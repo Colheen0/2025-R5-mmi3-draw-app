@@ -1,6 +1,8 @@
 import { io, type Socket } from 'socket.io-client';
 import { useSocketStore } from '../store/useSocketStore';
 import type { User } from '../types/user.type';
+import type { DrawPoint, DrawStroke } from '../types/drawing.type';
+import type { Point } from '../types/drawing.type';
 
 /* This class is a singleton, it exports a single instance */
 const VITE_SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL;
@@ -10,9 +12,9 @@ export type SocketClientToServerEvents = {
   'myUser:join': (player: Omit<User, 'id' | 'socketId' | 'hasJoined'>) => void;
   'myUser:leave': (userId: string) => void;
   'myUser:edit': (userId: string, updates: Partial<User>) => void;
-  'draw:start': (data: unknown) => void; /* @todo */
-  'draw:move': (data: unknown) => void; /* @todo */
-  'draw:end': (data: unknown) => void; /* @todo */
+  'draw:start': (data: DrawPoint) => void; /* @todo */
+  'draw:move': (data: Point) => void; /* @todo */
+  'draw:end': () => void; /* @todo */
 }
 
 // Événements reçus du serveur vers le client
@@ -21,17 +23,17 @@ export type SocketServerToClientEvents = {
   'user:left': (payload: { user: User }) => void;
   'myUser:edited': (payload: { user: User }) => void;
   'users:updated': (payload: { users: User[] }) => void;
-  'server:draw:start': (payload: unknown) => void; 
+  'draw:start': (payload: DrawStroke) => void; 
 // @todo: ajouter les types pour les traits de dessin
-  'server:draw:move': (payload: unknown) => void; 
+  'draw:move': (payload: DrawStroke) => void; 
 // @todo: ajouter les types pour les traits de dessin
-  'server:draw:end':(payload: unknown) => void; 
+  'draw:end':(payload: DrawStroke) => void; 
 // @todo: ajouter les types pour les traits de dessin
 }
 
 export type GetEndpoints = {
   'users': {users: User[]};
-  'strokes': {strokes: unknown[]} // @todo: ajouter les types pour les traits de dessin
+  'strokes': {strokes: DrawStroke[]} // @todo: ajouter les types pour les traits de dessin
 }
 
 class _SocketManager {
