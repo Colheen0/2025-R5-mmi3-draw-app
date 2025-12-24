@@ -4,6 +4,8 @@ import { useMyUserStore } from "../../../user/store/useMyUserStore";
 import styles from './DrawArea.module.css';
 import { SocketManager } from "../../../../shared/services/SocketManager";
 import type { DrawStroke, Point } from "../../../../shared/types/drawing.type";
+import { absoluteToRelativeCoordinates } from "../../utils/absoluteToRelativeCoordinates";
+import { relativeToAbsoluteCoordinates } from "../../utils/relativeToAbsoluteCoordinates";
 
 /**
  * EN SAVOIR PLUS : 
@@ -46,6 +48,31 @@ export function DrawArea() {
   const getCanvasCoordinates = useCallback((e: { clientX: number, clientY: number }) => {
     return getCoordinatesRelativeToElement(e.clientX, e.clientY, canvasRef.current);
   }, []) 
+
+    /**
+     * Convertit des coordonnées absolues (pixels) en relatives (float entre 0 et 1)
+     * À utiliser avant d'envoyer au serveur les données
+     */
+    const toRelativeCoordinates = useCallback((
+      absoluteX: number, 
+      absoluteY: number
+    ): { x: number, y: number } => {
+      if (!parentRef.current) return { x: 0, y: 0 };
+      return absoluteToRelativeCoordinates(parentRef.current, absoluteX, absoluteY);
+    }, []);
+  
+    /**
+     * Convertit des coordonnées relatives (float entre 0 & 1) en absolues (pixel)
+     * À utiliser avant de dessiner sur le canvas
+     */
+    const toAbsoluteCoordinates = useCallback((
+      relativeX: number, 
+      relativeY: number
+    ): { x: number, y: number } => {
+      if (!parentRef.current) return { x: 0, y: 0 };
+      
+      return relativeToAbsoluteCoordinates(parentRef.current, relativeX, relativeY);
+    }, []);
 
   /**
    * Conseil @todo: 
@@ -93,16 +120,14 @@ export function DrawArea() {
       x: coordinates.x,
       y: coordinates.y,
     });
+    
+    const relativeCoordinates = toRelativeCoordinates(coordinates.x, coordinates.y);
+    SocketManager.emit('draw:move', relativeCoordinates);
 
-    SocketManager.emit('draw:move', {
-      x: coordinates.x,
-      y: coordinates.y
-    });
-
-  }, [drawLine, getCanvasCoordinates]);
+  }, [drawLine, getCanvasCoordinates, toRelativeCoordinates]);
 
 
-  const onMouseUp = useCallback((e: MouseEvent) => {
+  const onMouseUp = useCallback(() => {
     if (!canvasRef.current) {
       return;
     }
@@ -129,9 +154,10 @@ export function DrawArea() {
     const coordinates = getCanvasCoordinates(e);
     drawLine(coordinates, coordinates);
 
+    const relativeCoordinates = toRelativeCoordinates(coordinates.x, coordinates.y);
     SocketManager.emit('draw:start', {
-      x: coordinates.x,
-      y: coordinates.y,
+      x: relativeCoordinates.x,
+      y: relativeCoordinates.y,
       strokeWidth: 3,
       color: 'black'
     });
@@ -142,7 +168,7 @@ export function DrawArea() {
     */
     canvasRef.current?.addEventListener('mousemove', onMouseMove);
     canvasRef.current?.addEventListener('mouseup', onMouseUp);
-  }, [canUserDraw, onMouseMove, onMouseUp, drawLine, getCanvasCoordinates]);
+  }, [canUserDraw, onMouseMove, onMouseUp, drawLine, getCanvasCoordinates, toRelativeCoordinates]);
 
   /**
    * ===================
@@ -179,12 +205,6 @@ export function DrawArea() {
     }
   }, []);
 
-  /**
-   * ===================
-   * GESTION DU RESIZE
-   * ===================
-  */
-
   const drawOtherUserPoints = useCallback((socketId: string, points: Point[]) => {
     const previousPoints = otherUserStrokes.current.get(socketId) || [];
 
@@ -193,11 +213,15 @@ export function DrawArea() {
         return;
       }
 
+      /* Here the server send relative coordinates  so we must convert it */
       const to = point;
       const from = index === 0 ? point : points[index - 1]
-      drawLine(from, to);
+
+      const absoluteFrom = toAbsoluteCoordinates(from.x, from.y);
+      const absoluteTo = toAbsoluteCoordinates(to.x, to.y);
+      drawLine(absoluteFrom, absoluteTo);
     });
-  }, [drawLine]);
+  }, [drawLine, toAbsoluteCoordinates]);
 
   const onOtherUserDrawMove = useCallback((payload: DrawStroke) => {
     drawOtherUserPoints(payload.socketId, payload.points);
@@ -224,6 +248,14 @@ export function DrawArea() {
     otherUserStrokes.current.set(payload.socketId, payload.points);
   }, [drawOtherUserPoints]);
 
+
+  /**
+   * ===================
+   * GESTION DU RESIZE
+   * ===================
+  */
+
+  
   useEffect(() => {
     /**
      * On souhaite redimensionner le canvas et recharger les strokes au resize
