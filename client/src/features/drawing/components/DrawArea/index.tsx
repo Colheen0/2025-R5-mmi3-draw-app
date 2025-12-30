@@ -93,9 +93,9 @@ export function DrawArea() {
     
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 4;
-    if (from) {
+    if (!from) {
       ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
+      ctx.moveTo(to.x, to.y);
     }
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
@@ -115,7 +115,10 @@ export function DrawArea() {
     
     const coordinates = getCanvasCoordinates(e);
     drawLine(
-      null,  
+      {
+        x: coordinates.x,
+        y: coordinates.y,
+      },  
       {
         x: coordinates.x,
         y: coordinates.y,
@@ -152,7 +155,7 @@ export function DrawArea() {
       
       /** Transformation des coordoonées mouse (relatives à la page) vers des coordonnées relative au canvas  */
       const coordinates = getCanvasCoordinates(e);
-      drawLine(coordinates, coordinates);
+      drawLine(null, coordinates);
       
       const relativeCoordinates = toRelativeCoordinates(coordinates.x, coordinates.y);
       SocketManager.emit('draw:start', {
@@ -205,23 +208,30 @@ export function DrawArea() {
       }
     }, []);
     
-    const drawOtherUserPoints = useCallback((userId: string, points: Point[]) => {
-      const previousPoints = otherUserStrokes.current.get(userId) || [];
+    const drawOtherUserPoints = useCallback((
+      userId: string, 
+      points: Point[],
+      forceRedraw?: boolean 
+    ) => {
+     const previousPoints = forceRedraw ? [] : otherUserStrokes.current.get(userId) || [];
+
+     points.forEach((point, index) => {
+       if (previousPoints[index]) {
+         return;
+       }
       
-      points.forEach((point, index) => {
-        if (previousPoints[index]) {
-          return;
-        }
-        
-        /* Here the server send relative coordinates  so we must convert it */
-        const to = point;
-        const from = index === 0 ? point : points[index - 1]
-        
-        const absoluteFrom = toAbsoluteCoordinates(from.x, from.y);
-        const absoluteTo = toAbsoluteCoordinates(to.x, to.y);
-        drawLine(absoluteFrom, absoluteTo);
-      });
-    }, [drawLine, toAbsoluteCoordinates]);
+       /* Here the server send relative coordinates  so we must convert it */
+       const to = point;
+       const from = index === 0 ? null : points[index - 1]
+      
+       const absoluteFrom = from ? toAbsoluteCoordinates(from.x, from.y) : null;
+       const absoluteTo = toAbsoluteCoordinates(to.x, to.y);
+       drawLine(absoluteFrom, absoluteTo);
+     });
+
+
+     otherUserStrokes.current.set(userId, points);
+   }, [drawLine, toAbsoluteCoordinates]);
     
     const onOtherUserDrawMove = useCallback((payload: DrawStroke) => {
       drawOtherUserPoints(payload.userId, payload.points);
@@ -237,7 +247,7 @@ export function DrawArea() {
           return;
         }
         data.strokes.forEach((stroke) => {
-          drawOtherUserPoints(stroke.userId, stroke.points);
+          drawOtherUserPoints(stroke.userId, stroke.points, true);
         });
       })
     }, [drawOtherUserPoints]);
