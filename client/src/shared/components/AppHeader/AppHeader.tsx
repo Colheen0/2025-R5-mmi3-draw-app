@@ -4,7 +4,6 @@ import { MyUserBadge } from "../../../features/user/components/MyUserBadge/MyUse
 type AppHeaderProps = {
   onClickJoin: () => void;
 };
-
 export function AppHeader({ onClickJoin }: AppHeaderProps) {
   const myUser = useMyUserStore().myUser
   return (

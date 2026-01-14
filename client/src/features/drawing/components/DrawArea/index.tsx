@@ -240,6 +240,6 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
     <div className={[styles.drawArea, 'w-full', 'h-full', 'overflow-hidden', 'flex', 'items-center'].join(' ')} ref={parentRef}>
       <canvas className={[styles.drawArea__canvas, 'border-1'].join(' ')} onMouseDown={onMouseDown} ref={canvasRef}>
       </canvas>
-    </div>
-  )
-}
+      </div>
+    )
+  }
