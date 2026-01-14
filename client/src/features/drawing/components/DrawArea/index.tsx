@@ -4,16 +4,15 @@ import { useMyUserStore } from "../../../user/store/useMyUserStore";
 import styles from './DrawArea.module.css';
 import { SocketManager } from "../../../../shared/services/SocketManager";
 import type { DrawStroke, Point } from "../../../../shared/types/drawing.type";
-import type { Tool } from "../Toolbar";// Import du type si besoin
 
-// CHANGEMENT : Interface pour les props reçues du parent
 interface DrawAreaProps {
-  activeTool: Tool;
+  strokeColor: string; 
+  strokeWidth: number; 
 }
 
-export function DrawArea({ activeTool }: DrawAreaProps) {
+export function DrawArea({ strokeColor, strokeWidth }: DrawAreaProps) {
   // ===================
-  // REFS (Pas de useState ici !)
+  // REFS
   // ===================
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -25,8 +24,22 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
   const canUserDraw = useMemo(() => myUser !== null, [myUser]); 
 
   // ===================
-  // LOGIQUE DE DESSIN
+  // LOGIQUE DE DESSIN & NETTOYAGE
   // ===================
+
+  // AJOUT : Fonction pour vider le canvas
+  const clearCanvas = useCallback(() => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+
+    // On efface visuellement
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    
+    // On vide la mémoire locale des tracés des autres
+    otherUserStrokes.current.clear();
+    otherUserTools.current.clear();
+  }, []);
 
   const getCanvasCoordinates = useCallback((e: { clientX: number, clientY: number }) => {
     return getCoordinatesRelativeToElement(e.clientX, e.clientY, canvasRef.current);
@@ -55,7 +68,7 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
   }, []);
 
   // ===================
-  // EVENTS SOURIS (Utilise activeTool prop)
+  // EVENTS SOURIS
   // ===================
 
   const onMouseMove = useCallback((e: MouseEvent) => {
@@ -63,14 +76,11 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
 
     const coordinates = getCanvasCoordinates(e);
 
-    // CHANGEMENT : On utilise activeTool (la prop) au lieu du state local
-    const currentColor = activeTool === 'pen' ? '#000' : '#FFF';
-    const currentWidth = activeTool === 'pen' ? 3 : 15;
+    const currentColor = strokeColor;
+    const currentWidth = strokeWidth;
 
-    // Dessin local
     drawLine(null, { x: coordinates.x, y: coordinates.y }, { strokeColor: currentColor, strokeWidth: currentWidth });
 
-    // Envoi Socket
     const width = canvasDimensions.current.width;
     const height = canvasDimensions.current.height;
 
@@ -80,14 +90,14 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
         y: coordinates.y / height
       });
     }
-  }, [drawLine, getCanvasCoordinates, activeTool]); // DEPENDANCE AJOUTÉE : activeTool
+  }, [drawLine, getCanvasCoordinates, strokeColor, strokeWidth]);
 
   const onMouseUp = useCallback((e: MouseEvent) => {
     if (!canvasRef.current) return;
-    console.log(e);
     SocketManager.emit('draw:end');
     canvasRef.current.removeEventListener('mousemove', onMouseMove);
     canvasRef.current.removeEventListener('mouseup', onMouseUp);
+    console.log(e);
   }, [onMouseMove]);
   
   const onMouseDown: React.MouseEventHandler<HTMLCanvasElement> = useCallback((e) => {
@@ -98,9 +108,8 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
 
     const coordinates = getCanvasCoordinates(e);
     
-    // CHANGEMENT : Utilisation de activeTool
-    const currentColor = activeTool === 'pen' ? '#000' : '#FFF';
-    const currentWidth = activeTool === 'pen' ? 3 : 15;
+    const currentColor = strokeColor;
+    const currentWidth = strokeWidth;
 
     drawLine(coordinates, coordinates, { strokeColor: currentColor, strokeWidth: currentWidth });
 
@@ -112,16 +121,16 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
         x: coordinates.x / width,
         y: coordinates.y / height,
         strokeWidth: currentWidth,
-        color: currentColor
+        color: currentColor 
       });
     }
 
     canvasRef.current?.addEventListener('mousemove', onMouseMove);
     canvasRef.current?.addEventListener('mouseup', onMouseUp);
-  }, [canUserDraw, onMouseMove, onMouseUp, drawLine, getCanvasCoordinates, activeTool]); // DEPENDANCE AJOUTÉE : activeTool
+  }, [canUserDraw, onMouseMove, onMouseUp, drawLine, getCanvasCoordinates, strokeColor, strokeWidth]);
 
   // ===================
-  // GESTION DES AUTRES USERS (Inchangé)
+  // GESTION DES AUTRES USERS 
   // ===================
 
   const drawOtherUserPoints = useCallback((socketId: string, points: Point[], options?: { strokeColor?: string, strokeWidth?: number }) => {
@@ -164,10 +173,6 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
     otherUserStrokes.current.set(payload.socketId, payload.points); 
   }, [drawOtherUserPoints]);
 
-  //const onOtherUserDrawEnd = useCallback((_payload: DrawStroke) => {
-    // Pas de nettoyage pour garder l'historique
-  //}, []);
-
   const getAllStrokes = useCallback(() => {
      otherUserStrokes.current.clear();
      otherUserTools.current.clear();
@@ -187,7 +192,7 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
   }, [drawOtherUserPoints]);
 
   // ===================
-  // DIMENSIONS & LISTENERS (Inchangé)
+  // DIMENSIONS & LISTENERS
   // ===================
 
   const setCanvasDimensions = useCallback(() => {
@@ -219,27 +224,29 @@ export function DrawArea({ activeTool }: DrawAreaProps) {
     return () => resizeObserver.disconnect();
   }, [setCanvasDimensions, getAllStrokes]);
 
+  // ÉCOUTE DES EVENEMENTS SOCKET
   useEffect(() => {
     SocketManager.listen('draw:start', onOtherUserDrawStart)
     SocketManager.listen('draw:move', onOtherUserDrawMove)
-    //SocketManager.listen('draw:end', onOtherUserDrawEnd)
+    // AJOUT : On écoute l'ordre de tout effacer venant du serveur
+    SocketManager.listen('draw:clear', clearCanvas);
 
     return () => {
       SocketManager.off('draw:start')
       SocketManager.off('draw:move')
+      SocketManager.off('draw:clear') // On nettoie l'écouteur
       SocketManager.off('draw:end')
     }
-  }, [onOtherUserDrawStart, onOtherUserDrawMove]);
+  }, [onOtherUserDrawStart, onOtherUserDrawMove, clearCanvas]);
 
   useEffect(() => {
     getAllStrokes();
   }, [getAllStrokes]);
 
   return (
-    // CHANGEMENT : Plus de Toolbar ici, juste le canvas
     <div className={[styles.drawArea, 'w-full', 'h-full', 'overflow-hidden', 'flex', 'items-center'].join(' ')} ref={parentRef}>
       <canvas className={[styles.drawArea__canvas, 'border-1'].join(' ')} onMouseDown={onMouseDown} ref={canvasRef}>
       </canvas>
-      </div>
-    )
-  }
+    </div>
+  );
+}

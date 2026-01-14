@@ -15,6 +15,7 @@ export type SocketClientToServerEvents = {
   'draw:start': (data: DrawPoint) => void; /* @todo */
   'draw:move': (data: Point) => void; /* @todo */
   'draw:end': () => void; /* @todo */
+  'draw:clear': () => void;
 }
 
 // Événements reçus du serveur vers le client
@@ -29,6 +30,7 @@ export type SocketServerToClientEvents = {
 // @todo: ajouter les types pour les traits de dessin
   'draw:end':(payload: DrawStroke) => void; 
 // @todo: ajouter les types pour les traits de dessin
+  'draw:clear': () => void;
 }
 
 export type GetEndpoints = {

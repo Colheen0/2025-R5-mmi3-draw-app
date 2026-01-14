@@ -5,7 +5,7 @@ import { Server } from 'socket.io';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
 import { handleAppForClient, handleAppCleanup } from './app';
-import { getAllStrokes, startAutomaticCleanup, cleanupOldStrokes } from './draw';
+import { getAllStrokes, startAutomaticCleanup, cleanupOldStrokes, clearAllStrokes } from './draw';
 
 dotenv.config({ path: '../.env' })
 
@@ -30,7 +30,17 @@ const io = new Server(server, {
 
 io.on(CLIENT_TO_SERVER_EVENTS_NAMES.CONNECTION, (socket) => {
   handleAppForClient(app, io, socket);
+
+ socket.on('draw:clear', () => {
+    // On appelle la fonction de draw.ts qui vide les tableaux 'activeStrokes' et 'completedStrokes'
+    clearAllStrokes(); 
+    // On prévient tous les clients pour qu'ils effacent leur canvas local
+    io.emit('draw:clear'); 
+    console.log(`Le canvas a été vidé par : ${socket.id}`);
+  });
 })
+
+
 
 app.get('/', (req, res) => {
   res.status(200).send("0K");
