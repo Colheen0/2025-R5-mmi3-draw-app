@@ -3,6 +3,7 @@ export type UserListProps = {
     id: string;
     username: string;
     avatar: string;
+    color: string;
   }[] /* Ici je précise explicitement que j'attends non pas un type User, mais un un array d'objets avec une clé id, username & avatar. --> Ca rend mes composants bien plus indépendants & réutilisables */
 }
 
@@ -19,6 +20,10 @@ export function UserList({ users }: UserListProps){
               <div>
                 <div className="text-xs uppercase font-semibold">{user.username}</div>
               </div>
+              <div 
+                className="w-4 h-4 rounded-full border border-black/5 mr-2" 
+                style={{ backgroundColor: user.color || '#000' }}
+              ></div>
             </li>
           ))
         :

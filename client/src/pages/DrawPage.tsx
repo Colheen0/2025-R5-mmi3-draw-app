@@ -8,15 +8,29 @@ import { DrawArea } from '../features/drawing/components/DrawArea';
 import { DrawToolbar } from '../features/drawing/components/Toolbar';
 import type { Tool } from '../features/drawing/components/Toolbar';
 import { SocketManager } from '../shared/services/SocketManager';
+import { useMyUserStore } from '../features/user/store/useMyUserStore';
 
 function DrawPage() {
   const { joinMyUser } = useJoinMyUser();
   const { userList } = useUpdatedUserList();
+  // AJOUT : Récupération du profil de l'utilisateur connecté
+  const { myUser } = useMyUserStore();
 
-  // ÉTATS GLOBAUX (Couleur, Taille, Outil)
+  // ÉTATS GLOBAUX
   const [activeTool, setActiveTool] = useState<Tool>('pen');
   const [strokeColor, setStrokeColor] = useState<string>('#000000');
   const [strokeWidth, setStrokeWidth] = useState<number>(3);
+
+  // LOGIQUE : Changement de couleur + Synchronisation profil
+  const handleColorChange = (newColor: string) => {
+    // 1. On change la couleur locale du pinceau
+    setStrokeColor(newColor);
+    
+    // 2. On informe le serveur pour mettre à jour la pastille dans la liste
+    if (myUser) {
+      SocketManager.emit('myUser:edit', myUser.id, { color: newColor });
+    }
+  };
 
   // FONCTION : Tout effacer
   const handleClearAll = () => {
@@ -39,7 +53,8 @@ function DrawPage() {
               activeTool={activeTool} 
               onToolChange={setActiveTool} 
               strokeColor={strokeColor}
-              onColorChange={setStrokeColor}
+              // CORRECTION : On utilise handleColorChange au lieu de setStrokeColor
+              onColorChange={handleColorChange} 
               strokeWidth={strokeWidth}
               onWidthChange={setStrokeWidth}
               onClearAll={handleClearAll}

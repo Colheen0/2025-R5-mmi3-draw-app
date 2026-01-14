@@ -4,4 +4,5 @@ export type User =  {
   avatar: string;
   username: string;
   hasJoined: boolean;
+  color: string;
 }

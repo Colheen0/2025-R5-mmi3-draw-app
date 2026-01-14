@@ -8,6 +8,7 @@ import type { DrawStroke, Point } from "../../../../shared/types/drawing.type";
 interface DrawAreaProps {
   strokeColor: string; 
   strokeWidth: number; 
+
 }
 
 export function DrawArea({ strokeColor, strokeWidth }: DrawAreaProps) {
@@ -234,7 +235,7 @@ export function DrawArea({ strokeColor, strokeWidth }: DrawAreaProps) {
     return () => {
       SocketManager.off('draw:start')
       SocketManager.off('draw:move')
-      SocketManager.off('draw:clear') // On nettoie l'écouteur
+      SocketManager.off('draw:clear') 
       SocketManager.off('draw:end')
     }
   }, [onOtherUserDrawStart, onOtherUserDrawMove, clearCanvas]);

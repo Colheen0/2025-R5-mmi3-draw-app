@@ -1,6 +1,7 @@
 export type MyUserBadgeProps = {
   username: string;
   avatar: string;
+  color: string;
 }
 
 export const MyUserBadge = (myUser: MyUserBadgeProps) => {
@@ -12,6 +13,10 @@ export const MyUserBadge = (myUser: MyUserBadgeProps) => {
         </div>
       </div>
       <span className="username">{myUser.username}</span>
+      <div 
+        className="w-3 h-3 rounded-full border border-black/10" 
+        style={{ backgroundColor: myUser.color }}
+      ></div>
     </div>
   );
 }

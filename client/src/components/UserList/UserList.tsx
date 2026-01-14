@@ -1,5 +1,5 @@
 type Props = {
-  users: Array<{username: string, avatar: string;}>;
+  users: Array<{username: string, avatar: string; color: string}>;
 }
 
 export function UserList({users}: Props) {

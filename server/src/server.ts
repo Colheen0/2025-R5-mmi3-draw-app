@@ -32,7 +32,6 @@ io.on(CLIENT_TO_SERVER_EVENTS_NAMES.CONNECTION, (socket) => {
   handleAppForClient(app, io, socket);
 
  socket.on('draw:clear', () => {
-    // On appelle la fonction de draw.ts qui vide les tableaux 'activeStrokes' et 'completedStrokes'
     clearAllStrokes(); 
     // On prévient tous les clients pour qu'ils effacent leur canvas local
     io.emit('draw:clear'); 
